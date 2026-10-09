@@ -155,6 +155,31 @@ export default function Recorder({ onRecordingComplete, onError, busy }: Recorde
         );
       }
 
+      // Chequeo previo de permiso: si ya está denegado, Chrome NO muestra el
+      // prompt nativo y getUserMedia falla de inmediato con NotAllowedError.
+      // Mejor detectar el estado y guiar al usuario con instrucciones exactas.
+      try {
+        if (
+          typeof navigator !== "undefined" &&
+          navigator.permissions &&
+          typeof navigator.permissions.query === "function"
+        ) {
+          const status = await navigator.permissions.query({
+            name: "microphone",
+          } as PermissionDescriptor);
+          if (status.state === "denied") {
+            setStarting(false);
+            onError(
+              "El micrófono está bloqueado para este sitio. Toca el 🔒 en la barra de direcciones → Permisos → Micrófono → Permitir, luego recarga la página."
+            );
+            return;
+          }
+          // 'prompt' → getUserMedia muestra el prompt nativo. 'granted' → directo.
+        }
+      } catch {
+        // Permissions API no disponible o falló: seguimos con getUserMedia normal.
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
@@ -216,7 +241,7 @@ export default function Recorder({ onRecordingComplete, onError, busy }: Recorde
       cleanup();
       if (err instanceof DOMException && err.name === "NotAllowedError") {
         onError(
-          "Permiso de micrófono denegado. Actívalo en tu navegador para grabar."
+          "Permiso de micrófono denegado. Para activarlo: toca el 🔒 en la barra de direcciones → Permisos → Micrófono → Permitir, luego recarga la página."
         );
       } else if (err instanceof DOMException && err.name === "NotFoundError") {
         onError("No se encontró ningún micrófono en este dispositivo.");
